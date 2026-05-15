@@ -1,0 +1,75 @@
+plugins {
+    id 'java'
+    id 'application'
+    id 'org.openjfx.javafxplugin' version '0.1.0'
+}
+
+group = 'project'
+version = '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // JUnit Platform - เพิ่มให้ครบ
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.10.0'
+    testImplementation 'org.junit.jupiter:junit-jupiter-params:5.10.0'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.10.0'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.10.0'
+    testRuntimeOnly 'org.junit.platform:junit-platform-engine:1.10.0'
+
+    // TestFX
+    testImplementation 'org.testfx:testfx-core:4.0.18'
+    testImplementation 'org.testfx:testfx-junit5:4.0.18'
+    testImplementation 'org.hamcrest:hamcrest:2.2'
+
+    // JavaFX
+    implementation 'org.openjfx:javafx-controls:24'
+    implementation 'org.openjfx:javafx-fxml:24'
+    implementation 'org.openjfx:javafx-media:24'
+}
+
+javafx {
+    version = '24.0.2'
+    modules = ['javafx.controls', 'javafx.fxml', 'javafx.graphics', 'javafx.media', 'javafx.web', 'javafx.swing']
+}
+
+application {
+    mainClass = 'SnakeGame2P.Main'
+}
+
+test {
+    useJUnitPlatform()
+
+    // บังคับให้ใช้ classpath ที่ถูกต้อง
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+
+    testLogging {
+        events "started", "passed", "skipped", "failed"
+        exceptionFormat "full"
+    }
+
+    jvmArgs = [
+            '--add-opens=javafx.graphics/com.sun.javafx.application=ALL-UNNAMED',
+            '--add-opens=javafx.base/com.sun.javafx.runtime=ALL-UNNAMED',
+            '--add-opens=javafx.graphics/com.sun.glass.ui=ALL-UNNAMED'
+    ]
+}
+
+// สร้าง task สำหรับรัน test เฉพาะที่ต้องการ
+task runDirectionTest(type: Test) {
+    useJUnitPlatform()
+    filter {
+        includeTestsMatching "java.DirectionTest"
+    }
+}
+
+jar {
+    manifest {
+        attributes(
+                'Main-Class': 'SnakeGame2P.Main'
+        )
+    }
+}

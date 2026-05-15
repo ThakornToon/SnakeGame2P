@@ -1,0 +1,424 @@
+@startuml
+enum SnakeGame2P.utils.Direction {
++  UP
++  DOWN
++  LEFT
++  RIGHT
++  NONE
+~ <<Create>> Direction()
++ boolean isOpposite(Direction)
+}
+
+
+interface SnakeGame2P.view.renderer.GameRendererStrategy {
+~ void render(Graphics,Snake,Snake,Food,String)
+}
+
+class SnakeGame2P.utils.Constants {
++ {static} int BOARD_WIDTH
++ {static} int BOARD_HEIGHT
++ {static} int UNIT_SIZE
++ {static} int NORMAL_SPEED_DELAY
++ {static} int SPEED_BOOST_SHRINK_INTERVAL
++ {static} Color SNAKE1_HEAD_COLOR
++ {static} Color SNAKE1_BODY_COLOR
++ {static} Color SNAKE1_BOOST_HEAD_COLOR
++ {static} Color SNAKE2_HEAD_COLOR
++ {static} Color SNAKE2_BODY_COLOR
++ {static} Color SNAKE2_BOOST_HEAD_COLOR
++ {static} Color FOOD_COLOR
++ {static} Color GRID_COLOR
++ {static} Color OVERLAY_COLOR
++ {static} int SNAKE1_START_X
++ {static} int SNAKE1_START_Y
++ {static} int SNAKE2_START_X
++ {static} int SNAKE2_START_Y
++ {static} String GAME_TITLE
++ {static} String PAUSED_TEXT
++ {static} String CONTINUE_TEXT
++ {static} String MENU_TEXT
++ {static} String SOUND_MENU
++ {static} String SOUND_BACKGROUND
++ {static} String SOUND_GAME_OVER
++ {static} String SOUND_EAT
+}
+
+interface SnakeGame2P.model.behavior.Movable {
+~ void move()
+~ void setDirection(Direction)
+~ Direction getDirection()
+}
+
+class SnakeGame2P.model.entity.Snake {
+- List<Integer> xPositions
+- List<Integer> yPositions
+- Direction direction
+- boolean powerBoostActive
+- long lastShrinkTime
+- int foodEaten
+- Color headColor
+- Color bodyColor
+- Color boostHeadColor
++ <<Create>> Snake(int,int,Direction,Color,Color,Color)
++ void move()
++ void setDirection(Direction)
++ Direction getDirection()
++ void activatePowerBoost()
++ void deactivatePowerBoost()
++ boolean isPowerBoostActive()
++ void applyPowerBoostEffect()
++ void grow()
+- void shrink()
++ boolean isCollidingWith(Collidable)
++ boolean isCollidingWithSnake(Snake)
++ boolean isCollidingWithSelf()
++ boolean isBodyAt(Point)
++ boolean isOutOfBounds()
++ void draw(Graphics)
++ Point getHead()
++ int getLength()
++ int getFoodEaten()
++ long getLastShrinkTime()
++ void setLastShrinkTime(long)
++ List<Integer> getXPositions()
++ List<Integer> getYPositions()
+}
+
+
+class SnakeGame2P.view.GamePanel {
+- Snake snake1
+- Snake snake2
+- Food food
+- GameState currentState
+- String winnerText
+- GameRenderer renderer
+- AudioManager audioManager
+- JButton startButton
+- JButton restartButton
+- JButton howToPlayButton
+- JButton muteButton
++ <<Create>> GamePanel(AudioManager)
+- void createButtons()
+- JButton createButton(String,int,int,int,int,int)
++ void updateGameData(Snake,Snake,Food,GameState,String)
+# void paintComponent(Graphics)
++ JButton getStartButton()
++ JButton getRestartButton()
++ JButton getHowToPlayButton()
++ JButton getMuteButton()
++ void setRestartButtonVisible(boolean)
++ void setMenuButtonsVisible(boolean)
++ void updateMuteButton(boolean)
+}
+
+
+interface SnakeGame2P.model.behavior.Collidable {
+~ boolean isCollidingWith(Collidable)
+~ Point getPosition()
+}
+
+class GameControllerLogicTest {
+- GameController controller
+- TestableGamePanel testPanel
+- TestableAudioManager testAudioManager
+- GameControllerAccessor accessor
+~ void setUp()
+~ void testDetermineHeadOnHeadWinner_Snake1PowerBoost()
+~ void testDetermineHeadOnHeadWinner_Snake2PowerBoost()
+~ void testDetermineHeadOnHeadWinner_BothPowerBoostOrNone_LargerWins()
+~ void testDetermineHeadOnHeadWinner_Tie()
+~ void testGameOverTrigger()
+~ void testPauseFunctionality()
+~ void testReturnToMenu()
+~ void testFoodGeneration_NotOnSnake()
+- boolean isFoodOnSnake(Food,Snake)
+}
+
+
+class GameControllerLogicTest$TestableGamePanel {
+- boolean restartButtonVisible
+- boolean menuButtonsVisible
+- boolean muted
++ <<Create>> TestableGamePanel(AudioManager)
++ void setRestartButtonVisible(boolean)
++ void setMenuButtonsVisible(boolean)
++ void updateMuteButton(boolean)
++ boolean wasRestartButtonVisible()
++ boolean areMenuButtonsVisible()
++ boolean requestFocusInWindow()
+}
+
+
+class GameControllerLogicTest$TestableAudioManager {
+- boolean muted
+- String lastPlayedSound
+- String lastPlayedBackground
++ <<Create>> TestableAudioManager()
+# void loadSounds()
++ void playSound(String)
++ void playBackgroundMusic(String)
++ void stopAllMusic()
++ void toggleMute()
++ boolean isMuted()
++ boolean wasSoundPlayed(String)
++ boolean wasBackgroundMusicPlayed(String)
+}
+
+
+class GameControllerLogicTest$GameControllerAccessor {
+- GameController controller
++ <<Create>> GameControllerAccessor(GameController)
++ Snake getSnake1()
++ Snake getSnake2()
++ Food getFood()
++ GameState getState()
++ String getWinnerText()
+- T getField(String)
++ String callDetermineHeadOnHeadWinner()
++ void callGenerateNewFood()
++ void callGameOver()
+- void invokeMethod(String,Object)
+- Method findMethod(String)
+}
+
+
+class SnakeGame2P.view.GameRenderer {
+- Map<GameState,GameRendererStrategy> renderers
++ <<Create>> GameRenderer()
++ void render(Graphics,GameState,Snake,Snake,Food,String)
+}
+
+
+enum SnakeGame2P.utils.GameState {
++  MENU
++  PLAYING
++  PAUSED
++  GAME_OVER
+}
+
+class SnakeGame2P.view.renderer.PausedRenderer {
+- PlayingRenderer playingRenderer
++ void render(Graphics,Snake,Snake,Food,String)
+}
+
+
+class SnakeGame2P.controller.PowerBoostManager {
++ void handlePowerBoosts(Snake,Snake)
+- void handleSingleSnakePowerBoost(Snake,long)
++ void activatePowerBoost(Snake)
++ void deactivatePowerBoost(Snake)
+}
+
+class SnakeGame2P.model.entity.Food {
+- Random random
++ <<Create>> Food()
++ void generateNewPosition()
++ boolean isEatenBy(Snake)
++ void onConsumed(Snake)
++ boolean isOccupiedBy(Snake,Snake)
+- boolean isOccupiedBySnake(Snake)
++ void draw(Graphics)
+}
+
+
+class SnakeGame2P.Main {
++ {static} void main(String[])
+}
+
+class PowerBoostManagerTest {
+- PowerBoostManager manager
+- Snake snake
+- Snake snake2
+~ void setUp()
+~ void testActivatePowerBoost()
+~ void testActivatePowerBoost_WhenTooShort()
+~ void testDeactivatePowerBoost()
+~ void testHandlePowerBoosts_ActiveButNotTimeToShrink()
+~ void testHandlePowerBoosts_ShrinkWhenActive()
+~ void testHandlePowerBoosts_MultipleShrinks()
+~ void testHandlePowerBoosts_AutoDeactivateAtLength3()
+~ void testHandlePowerBoosts_WithTwoSnakes()
+}
+
+
+interface SnakeGame2P.model.behavior.Consumable {
+~ boolean isEatenBy(Snake)
+~ void onConsumed(Snake)
+}
+
+class GameObjectTest {
+- TestGameObject obj1
+- TestGameObject obj2
+~ void setUp()
+~ void testConstructorAndGetters()
+~ void testSetPosition()
+~ void testIsCollidingWith_SamePosition()
+~ void testIsCollidingWith_DifferentPosition()
+~ void testGetPositionReturnsCopy()
+}
+
+
+class GameObjectTest$TestGameObject {
++ <<Create>> TestGameObject(int,int)
++ void draw(Graphics)
+}
+
+abstract class SnakeGame2P.model.entity.GameObject {
+# Point position
++ <<Create>> GameObject(int,int)
++ int getX()
++ int getY()
++ Point getPosition()
++ void setPosition(int,int)
++ boolean isCollidingWith(Collidable)
++ {abstract}void draw(Graphics)
+}
+
+
+class DirectionTest {
+~ void testEnumValues()
+~ void testIsOpposite_CorrectPairs()
+~ void testIsOpposite_WithNone()
+- boolean contains(Direction[],Direction)
+}
+
+class SnakeTest {
+- Snake snake
+- {static} int START_X
+- {static} int START_Y
+~ void setUp()
+~ void testInitialState()
+~ void testMoveRight()
+~ void testMoveLeft()
+~ void testMoveUp()
+~ void testMoveDown()
+~ void testCannotReverseDirection()
+~ void testGrow()
+~ void testShrink()
+~ void testIsCollidingWithSelf_NoCollision()
+~ void testIsOutOfBounds()
+~ void testIsBodyAt()
+~ void testGetHead()
+~ void testGetXPositions_ReturnsCopy()
+~ void testGetYPositions_ReturnsCopy()
+}
+
+
+class CollisionTest {
+~ void setUp()
+~ void testCollisionWithSelf_HeadToBodyLogic()
+~ void testCollisionWithOtherSnake_HeadToHead()
+~ void testCollisionWithOtherSnake_HeadToBody()
+}
+
+class SnakeGame2P.view.renderer.GameOverRenderer {
+- PlayingRenderer playingRenderer
++ void render(Graphics,Snake,Snake,Food,String)
+}
+
+
+class FoodTest {
+- Food food
+- Snake snake1
+- Snake snake2
+~ void setUp()
+~ void testFoodCreation()
+~ void testGenerateNewPosition()
+~ void testIsEatenBy_HeadCollision()
+~ void testIsEatenBy_BodyCollision()
+~ void testOnConsumed_Effect()
+~ void testIsOccupiedBy_WithBothSnakes()
+}
+
+
+interface SnakeGame2P.model.behavior.PowerBoostable {
+~ void activatePowerBoost()
+~ void deactivatePowerBoost()
+~ boolean isPowerBoostActive()
+~ void applyPowerBoostEffect()
+}
+
+class SnakeGame2P.view.renderer.MenuRenderer {
++ void render(Graphics,Snake,Snake,Food,String)
+- void drawExampleSnakes(Graphics)
+}
+
+class SnakeGame2P.controller.GameController {
+- GamePanel panel
+- AudioManager audioManager
+- PowerBoostManager powerBoostManager
+- Snake snake1
+- Snake snake2
+- Food food
+- GameState currentState
+- String winnerText
+- Timer timer
++ <<Create>> GameController(GamePanel,AudioManager)
+- void setupButtonListeners()
+- void setupKeyboardListener()
+- void handleKeyPressed(KeyEvent)
+- void handleMovementKeys(int)
+- void handleKeyReleased(KeyEvent)
+- void showHowToPlay()
+- void toggleMute()
++ void startGame()
++ void restartGame()
++ void returnToMenu()
++ void togglePause()
+- void initializeGame()
+- void updateView()
++ void actionPerformed(ActionEvent)
+- void moveSnakes()
+- void checkFoodCollision()
+- void generateNewFood()
+- void checkCollisions()
+- void determineHeadOnHeadWinner()
+- void gameOver()
+}
+
+
+class SnakeGame2P.audio.AudioManager {
+- Map<String,Clip> sounds
+- boolean muted
++ <<Create>> AudioManager()
+# void loadSounds()
+- void loadSound(String)
++ void playSound(String)
++ void playBackgroundMusic(String)
++ void stopAllMusic()
++ void toggleMute()
++ boolean isMuted()
+}
+
+
+class SnakeGame2P.view.renderer.PlayingRenderer {
++ void render(Graphics,Snake,Snake,Food,String)
+- void drawGrid(Graphics)
+- void drawFood(Graphics,Food)
+- void drawSnake(Graphics,Snake)
+- void drawGameInfo(Graphics,Snake,Snake)
+- void drawPauseHint(Graphics)
+}
+
+
+
+SnakeGame2P.model.behavior.Movable <|.. SnakeGame2P.model.entity.Snake
+SnakeGame2P.model.behavior.PowerBoostable <|.. SnakeGame2P.model.entity.Snake
+SnakeGame2P.model.entity.GameObject <|-- SnakeGame2P.model.entity.Snake
+SnakeGame2P.view.JPanel <|-- SnakeGame2P.view.GamePanel
+GameControllerLogicTest +.. GameControllerLogicTest$TestableGamePanel
+GamePanel <|-- GameControllerLogicTest$TestableGamePanel
+GameControllerLogicTest +.. GameControllerLogicTest$TestableAudioManager
+AudioManager <|-- GameControllerLogicTest$TestableAudioManager
+GameControllerLogicTest +.. GameControllerLogicTest$GameControllerAccessor
+SnakeGame2P.view.renderer.GameRendererStrategy <|.. SnakeGame2P.view.renderer.PausedRenderer
+SnakeGame2P.model.behavior.Consumable <|.. SnakeGame2P.model.entity.Food
+SnakeGame2P.model.entity.GameObject <|-- SnakeGame2P.model.entity.Food
+GameObjectTest +.. GameObjectTest$TestGameObject
+GameObject <|-- GameObjectTest$TestGameObject
+SnakeGame2P.model.behavior.Collidable <|.. SnakeGame2P.model.entity.GameObject
+SnakeGame2P.view.renderer.GameRendererStrategy <|.. SnakeGame2P.view.renderer.GameOverRenderer
+SnakeGame2P.view.renderer.GameRendererStrategy <|.. SnakeGame2P.view.renderer.MenuRenderer
+SnakeGame2P.controller.ActionListener <|.. SnakeGame2P.controller.GameController
+SnakeGame2P.view.renderer.GameRendererStrategy <|.. SnakeGame2P.view.renderer.PlayingRenderer
+@enduml
