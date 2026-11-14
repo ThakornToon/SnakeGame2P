@@ -19,11 +19,11 @@ public class GameRenderer {
     /**
      * Constructor: สร้าง Renderer สำหรับแต่ละสถานะ
      */
-    public GameRenderer() {
-        renderers.put(GameState.MENU, new MenuRenderer());
-        renderers.put(GameState.PLAYING, new PlayingRenderer());
-        renderers.put(GameState.PAUSED, new PausedRenderer());
-        renderers.put(GameState.GAME_OVER, new GameOverRenderer());
+    public GameRenderer(GamePanel panel) {
+        renderers.put(GameState.MENU, new MenuRenderer(panel));
+        renderers.put(GameState.PLAYING, new PlayingRenderer(panel));
+        renderers.put(GameState.PAUSED, new PausedRenderer(panel));
+        renderers.put(GameState.GAME_OVER, new GameOverRenderer(panel));
     }
 
     /**

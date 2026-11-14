@@ -53,7 +53,7 @@ public class GameControllerLogicTest {
     // ========== Test Methods - ทดสอบการตัดสินผู้ชนะ ==========
 
     /**
-     * ทดสอบกรณีหัวชนหัว: ผู้เล่น 1 เสริมพลัง ควรชนะ
+     * ทดสอบกรณีหัวชนหัว: ผู้เล่น 1 ตัวใหญ่กว่าแต่ความเร็วเร่งอยู่ ควรชนะ (วัดกันที่ความยาว)
      */
     @Test
     void testDetermineHeadOnHeadWinner_Snake1PowerBoost() {
@@ -69,12 +69,12 @@ public class GameControllerLogicTest {
         // เรียก method ที่ต้องการทดสอบ
         String winner = accessor.callDetermineHeadOnHeadWinner();
 
-        assertTrue(winner.contains("ผู้เล่น 1") && winner.contains("เสริมพลัง"),
-                "ผู้เล่น 1 ที่เสริมพลังควรชนะ แต่ได้: " + winner);
+        assertTrue(winner.contains("ผู้เล่น 1") && winner.contains("ตัวใหญ่กว่า"),
+                "ผู้เล่น 1 ที่ตัวใหญ่กว่าควรชนะ แต่ได้: " + winner);
     }
 
     /**
-     * ทดสอบกรณีหัวชนหัว: ผู้เล่น 2 เสริมพลัง ควรชนะ
+     * ทดสอบกรณีหัวชนหัว: ผู้เล่น 2 ตัวใหญ่กว่าแต่ความเร็วเร่งอยู่ ควรชนะ (วัดกันที่ความยาว)
      */
     @Test
     void testDetermineHeadOnHeadWinner_Snake2PowerBoost() {
@@ -86,8 +86,8 @@ public class GameControllerLogicTest {
 
         String winner = accessor.callDetermineHeadOnHeadWinner();
 
-        assertTrue(winner.contains("ผู้เล่น 2") && winner.contains("เสริมพลัง"),
-                "ผู้เล่น 2 ที่เสริมพลังควรชนะ แต่ได้: " + winner);
+        assertTrue(winner.contains("ผู้เล่น 2") && winner.contains("ตัวใหญ่กว่า"),
+                "ผู้เล่น 2 ที่ตัวใหญ่กว่าควรชนะ แต่ได้: " + winner);
     }
 
     /**
@@ -185,6 +185,111 @@ public class GameControllerLogicTest {
         assertTrue(testAudioManager.wasBackgroundMusicPlayed(Constants.SOUND_MENU));
     }
 
+    /**
+     * ทดสอบกรณีหมดเวลา: ผู้เล่นที่มีคะแนนมากกว่าเป็นผู้ชนะ
+     *
+     * ตรวจสอบ:
+     * - สถานะเปลี่ยนเป็น GAME_OVER
+     * - ข้อความผู้ชนะระบุผู้เล่นที่มีคะแนนมากกว่า
+     */
+    @Test
+    void testHandleTimeOut_ScoreDifference() {
+        // ทดสอบ: เมื่อหมดเวลา ผู้เล่นที่มีคะแนนสะสมมากกว่าควรเป็นฝ่ายชนะ
+        // เหตุผล: กติกาข้อ 1 ของการหมดเวลา แข่งขันด้วยคะแนนสะสม
+        controller.startGame();
+        Snake snake1 = accessor.getSnake1();
+        Snake snake2 = accessor.getSnake2();
+
+        // snake1 ได้ 3 แต้ม, snake2 ได้ 1 แต้ม
+        snake1.grow();
+        snake1.grow();
+        snake1.grow();
+        snake2.grow();
+
+        String winner = accessor.callHandleTimeOut();
+        assertEquals(GameState.GAME_OVER, accessor.getState());
+        assertTrue(winner.contains("ผู้เล่น 1 ชนะด้วยคะแนน"),
+                "Snake1 with higher score should win on timeout, but got: " + winner);
+    }
+
+    /**
+     * ทดสอบกรณีหมดเวลา: คะแนนเท่ากัน แต่งูตัวยาวกว่าเป็นผู้ชนะ
+     *
+     * ตรวจสอบ:
+     * - สถานะเปลี่ยนเป็น GAME_OVER
+     * - ข้อความผู้ชนะระบุผู้เล่นที่ตัวยาวกว่า
+     */
+    @Test
+    void testHandleTimeOut_TieScore_LengthDifference() {
+        // ทดสอบ: เมื่อหมดเวลาและคะแนนเท่ากัน งูตัวที่ยาวกว่าควรเป็นฝ่ายชนะ
+        // เหตุผล: กติกาข้อ 2 ของการหมดเวลา ใช้ความยาวลำตัวเป็น Tiebreaker
+        controller.startGame();
+        Snake snake1 = accessor.getSnake1();
+        Snake snake2 = accessor.getSnake2();
+
+        // คะแนนเท่ากัน (0 vs 0) แต่งูเขียวตัวยาวกว่า
+        snake1.grow();
+        // ลดแต้ม snake1 กลับเป็น 0 แต่ความยาวยังเป็น 4
+        snake1.decreaseScore(1);
+
+        assertEquals(0, snake1.getFoodEaten());
+        assertEquals(0, snake2.getFoodEaten());
+        assertTrue(snake1.getLength() > snake2.getLength());
+
+        String winner = accessor.callHandleTimeOut();
+        assertEquals(GameState.GAME_OVER, accessor.getState());
+        assertTrue(winner.contains("งูเขียวตัวยาวกว่าชนะ"),
+                "Snake1 with longer body should win on tied score timeout, but got: " + winner);
+    }
+
+    /**
+     * ทดสอบกรณีหมดเวลา: คะแนนและความยาวเท่ากัน ถือว่าเสมอ
+     *
+     * ตรวจสอบ:
+     * - สถานะเปลี่ยนเป็น GAME_OVER
+     * - ข้อความระบุว่าเสมอกัน
+     */
+    @Test
+    void testHandleTimeOut_CompleteTie() {
+        // ทดสอบ: เมื่อหมดเวลาและเท่ากันทั้งคะแนนและความยาว ผลลัพธ์ต้องเป็นเสมอ
+        // เหตุผล: กติกาข้อ 3 ของการหมดเวลา
+        controller.startGame();
+        Snake snake1 = accessor.getSnake1();
+        Snake snake2 = accessor.getSnake2();
+
+        assertEquals(snake1.getFoodEaten(), snake2.getFoodEaten());
+        assertEquals(snake1.getLength(), snake2.getLength());
+
+        String winner = accessor.callHandleTimeOut();
+        assertEquals(GameState.GAME_OVER, accessor.getState());
+        assertTrue(winner.contains("เสมอกัน"),
+                "Timeout with equal score and length should be a tie, but got: " + winner);
+    }
+
+    /**
+     * ทดสอบการสลับปิด/เปิดเสียง (toggleMute): ควรส่งผลต่อ AudioManager และแจ้ง Panel ให้ขึ้น toast
+     *
+     * ตรวจสอบ:
+     * - AudioManager สลับสถานะ muted
+     * - Panel ได้รับการแจ้งเตือน showMuteToast
+     */
+    @Test
+    void testToggleMute_NotifiesPanelAndAudioManager() {
+        // ทดสอบ: การสลับเปิด/ปิดเสียงต้องอัปเดตทั้ง AudioManager และ GamePanel
+        // เหตุผล: เพื่อให้เสียงหยุดเล่นและแสดงข้อความ toast แจ้งเตือนผู้เล่นอย่างถูกต้อง
+        assertFalse(testAudioManager.isMuted(), "Initially not muted");
+
+        accessor.callToggleMute();
+
+        assertTrue(testAudioManager.isMuted(), "AudioManager should be muted after toggle");
+        assertTrue(testPanel.isMuted(), "Panel should receive muted state true");
+
+        accessor.callToggleMute();
+
+        assertFalse(testAudioManager.isMuted(), "AudioManager should be unmuted after second toggle");
+        assertFalse(testPanel.isMuted(), "Panel should receive muted state false");
+    }
+
     // ========== Test Methods - ทดสอบอาหาร ==========
 
     /**
@@ -265,8 +370,12 @@ public class GameControllerLogicTest {
         }
 
         @Override
-        public void updateMuteButton(boolean muted) {
+        public void showMuteToast(boolean muted) {
             this.muted = muted;
+        }
+
+        public boolean isMuted() {
+            return muted;
         }
 
         /** ตรวจสอบว่าปุ่ม restart เคยถูกแสดงหรือไม่ */
@@ -424,6 +533,17 @@ public class GameControllerLogicTest {
         /** เรียก method gameOver */
         public void callGameOver() {
             invokeMethod("gameOver");
+        }
+
+        /** เรียก method handleTimeOut */
+        public String callHandleTimeOut() {
+            invokeMethod("handleTimeOut");
+            return getWinnerText();
+        }
+
+        /** เรียก method toggleMute */
+        public void callToggleMute() {
+            invokeMethod("toggleMute");
         }
 
         /**

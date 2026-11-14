@@ -7,11 +7,17 @@ import SnakeGame2P.audio.AudioManager;
 import SnakeGame2P.utils.Constants;
 import SnakeGame2P.utils.Direction;
 import javax.swing.*;
+import java.awt.Color;
+import java.awt.Point;
 import java.awt.event.*;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
 
 /**
- * คลาสควบคุมเกมหลัก
- * จัดการลอจิกทั้งหมดของเกม รวมถึงการเคลื่อนที่ การชน และสถานะต่างๆ
+ * Main game controller — owns all game logic: movement, collisions, and state transitions.
+ *
+ * คลาสควบคุมเกมหลัก จัดการลอจิกทั้งหมดของเกม รวมถึงการเคลื่อนที่ การชน และสถานะต่างๆ
  */
 public class GameController implements ActionListener {
 
@@ -27,8 +33,16 @@ public class GameController implements ActionListener {
     private GameState currentState;
     private String winnerText = "";
 
+    // ========== Timer & Bullets ==========
+    /** Remaining match time in milliseconds. Counts down each game tick. */
+    private int remainingTimeMs = 0;
+    /** All bullets currently on the board. */
+    private final List<Bullet> bullets = new ArrayList<>();
+
     // ========== Game Loop ==========
     private Timer timer;
+    /** Tick counter used to control normal snake speed (move every 2 ticks). */
+    private int tickCount = 0;
 
     /**
      * Constructor
@@ -55,7 +69,6 @@ public class GameController implements ActionListener {
         panel.getStartButton().addActionListener(e -> startGame());
         panel.getRestartButton().addActionListener(e -> restartGame());
         panel.getHowToPlayButton().addActionListener(e -> showHowToPlay());
-        panel.getMuteButton().addActionListener(e -> toggleMute());
     }
 
     /**
@@ -83,9 +96,7 @@ public class GameController implements ActionListener {
 
         // ESC: Pause/Resume
         if (key == KeyEvent.VK_ESCAPE) {
-            if (currentState == GameState.PLAYING) {
-                togglePause();
-            } else if (currentState == GameState.PAUSED) {
+            if (currentState == GameState.PLAYING || currentState == GameState.PAUSED) {
                 togglePause();
             }
             return;
@@ -94,6 +105,12 @@ public class GameController implements ActionListener {
         // R: กลับเมนู (เฉพาะตอน Pause)
         if (key == KeyEvent.VK_R && currentState == GameState.PAUSED) {
             returnToMenu();
+            return;
+        }
+
+        // P: สลับปิด/เปิดเสียง (ใช้ได้ทุกสถานะยกเว้นตอนกำลังเล่น)
+        if (key == KeyEvent.VK_P && currentState != GameState.PLAYING) {
+            toggleMute();
             return;
         }
 
@@ -142,6 +159,14 @@ public class GameController implements ActionListener {
             case KeyEvent.VK_M:
                 powerBoostManager.activatePowerBoost(snake2);
                 break;
+
+            case KeyEvent.VK_SPACE:
+                shootBullet(snake1);
+                break;
+
+            case KeyEvent.VK_SLASH:
+                shootBullet(snake2);
+                break;
         }
     }
 
@@ -163,39 +188,78 @@ public class GameController implements ActionListener {
     }
 
     /**
-     * แสดงหน้าต่างวิธีเล่น
+     * แสดงหน้าต่างวิธีเล่นแบบละเอียดครบถ้วน
      */
     private void showHowToPlay() {
         String howToPlay = """
-            วิธีเล่นเกมงู 2 ผู้เล่น
-            
-            ผู้เล่น 1 (งูเขียว):
-            - ใช้ WASD เพื่อเคลื่อนที่
-            - W: ขึ้น, A: ซ้าย, S: ลง, D: ขวา
-            - กด SHIFT ค้างเพื่อเสริมพลัง (ตัวจะสั้นลงทุก 0.5 วินาที)
-            
-            ผู้เล่น 2 (งูส้ม):
-            - ใช้ลูกศรเพื่อเคลื่อนที่
-            - ↑: ขึ้น, ↓: ลง, ←: ซ้าย, →: ขวา
-            - กด M ค้างเพื่อเสริมพลัง (ตัวจะสั้นลงทุก 0.5 วินาที)
-            
-            กติกาการชน:
-            - ถ้าหัวชนกัน: คนที่กำลังเสริมพลังจะชนะ
-            - ถ้าชนลำตัว: คนที่ชนลำตัวคนอื่นจะแพ้
-            - ถ้าหัวชนกันกรณีอื่นๆ: ใครตัวใหญ่กว่าชนะ
-            
-            กติกาทั่วไป:
-            - ชนขอบจอ แพ้
-            - ชนตัวเอง แพ้
-            
-            การควบคุมเพิ่มเติม:
-            - กด ESC เพื่อหยุดเกมชั่วคราว / เล่นต่อ
-            - ขณะหยุดเกม กด R เพื่อกลับหน้าเมนู
-            
-            Enjoy! 🐍
+            🎮 วิธีเล่นเกมงู 2 ผู้เล่น  |  How to Play – 2-Player Snake
+            ══════════════════════════════════════════════════════════════════
+
+            🐍 การควบคุมผู้เล่น  |  Player Controls:
+            ──────────────────────────────────────────────────────────────────
+            ผู้เล่น 1 (งูเขียว  |  Player 1 - Green Snake):
+              • W / A / S / D  : เคลื่อนที่ ขึ้น / ซ้าย / ลง / ขวา
+              • กด SHIFT ค้าง   : เร่งความเร็ว 2 เท่า (ยาว > 3, หด 1 หน่วยทุก 0.5 วิ)
+              • SPACEBAR       : ยิงกระสุน (ยาว ≥ 6, ลด 3 หน่วย, คูลดาวน์ 0.5 วิ)
+
+            ผู้เล่น 2 (งูส้ม  |  Player 2 - Orange Snake):
+              • ลูกศร ↑ / ← / ↓ / → : เคลื่อนที่ ขึ้น / ซ้าย / ลง / ขวา
+              • กด M ค้าง            : เร่งความเร็ว 2 เท่า (ยาว > 3, หด 1 หน่วยทุก 0.5 วิ)
+              • / (Slash)            : ยิงกระสุน (ยาว ≥ 6, ลด 3 หน่วย, คูลดาวน์ 0.5 วิ)
+
+            🍎 ไอเทมอาหารและบัฟพิเศษ  |  Food & Power-ups:
+            ──────────────────────────────────────────────────────────────────
+              • 🔴 สีแดง (Normal Food) : ความยาว +1, คะแนน +1
+              • 🟣 สีม่วง (Ghost Food)  : ความยาว +1, ล่องหนทะลุตัวคู่แข่งได้ 5 วินาที
+              • 🟡 สีทอง (Shield Food) : ความยาว +1, ได้รับโล่ป้องกันการชน 1 ครั้ง
+              • 🔵 สีฟ้า (Freeze Food) : ความยาว +1, แช่แข็งคู่ต่อสู้ 3 วินาที (ขยับไม่ได้)
+              * หมายเหตุ: อาหารมีอายุ 8 วินาที หากไม่มีใครงับกินจะหายไปและสุ่มเกิดใหม่
+
+            🔥 ระบบคอมโบ & คะแนนโบนัส  |  Combo Scoring:
+            ──────────────────────────────────────────────────────────────────
+              • หากกินอาหารต่อเนื่องภายใน 3 วินาที จะเพิ่มตัวคูณคอมโบ (สูงสุด ×5 COMBO!)
+              • ได้รับคะแนนโบนัสพิเศษเพิ่มตามจำนวนคอมโบ (+1 ถึง +4 คะแนนพิเศษ)
+
+            ⚡ โหมดเร่งความเร็วด่วน (Fast Phase):
+            ──────────────────────────────────────────────────────────────────
+              • ในช่วง 60 วินาทีสุดท้ายของเกม จะเข้าสู่ "FAST PHASE!"
+              • ความเร็วรอบเดินของเกมจะเพิ่มขึ้นเป็น 2 เท่าทันที
+              • ตัวจับเวลาจะเปลี่ยนเป็นสีส้ม และกระพริบสีแดงเตือนในช่วง 10 วินาทีสุดท้าย
+
+            💥 ระบบกระสุน  |  Bullets:
+            ──────────────────────────────────────────────────────────────────
+              • ยิงพุ่งออกจากหัวงูด้วยความเร็วสูงไปตามทิศทางที่งูกำลังเคลื่อนที่
+              • ยิงโดนคู่ต่อสู้ : ลดคะแนนคู่ต่อสู้ 2 แต้ม และทำให้งูคู่ต่อสู้หดสั้นลง 1 หน่วย
+              • ยิงโดนอาหาร     : ทำลายอาหารและสุ่มตำแหน่งอาหารเกิดใหม่ทันที
+              • กระสุนจะไม่ชนงูฝ่ายเดียวกันที่เป็นคนยิง
+
+            🛡️ กฎการชนและปฏิกิริยาของโล่  |  Collisions & Shield:
+            ──────────────────────────────────────────────────────────────────
+              • หัวชนหัว (Head-on)   : ตัวยาวกว่าชนะ / ถ้ายาวเท่ากันถือว่าเสมอ
+                                        (หากฝ่ายใดมีโล่ ฝ่ายมีโล่ชนะ / หากมีโล่ทั้งคู่ โล่จะแตกทั้งสองฝ่าย)
+              • หัวชนลำตัว (Body hit): ฝ่ายที่หัวพุ่งชนลำตัวฝ่ายตรงข้ามจะแพ้ทันที
+              • ชนขอบจอ (Wall hit)   : แพ้ทันที (หากมีโล่: โล่จะแตกและวาร์ปหัวงูไปขอบฝั่งตรงข้าม)
+              • ชนตัวเอง (Self hit)   : แพ้ทันที (หากมีโล่: โล่จะแตกและได้รับสถานะล่องหน 1.5 วินาที)
+              • โล่แตกจากการชนลำตัว   : โล่จะแตกและงูจะได้รับสถานะล่องหน 1.5 วินาทีเพื่อเลื้อยหลบออก
+
+            ⏱️ กติกาการตัดสินผู้ชนะ  |  Win Conditions:
+            ──────────────────────────────────────────────────────────────────
+              1. ฝ่ายตรงข้ามชนตาย (และไม่มีโล่ป้องกัน)
+              2. หากหมดเวลาแข่งขัน (180 วินาที):
+                 - ตัดสินจากคะแนนสะสม (ใครแต้มมากกว่าชนะ)
+                 - หากแต้มเท่ากัน ตัดสินจากความยาวของลำตัว (ใครตัวยาวกว่าชนะ)
+                 - หากเท่ากันทั้งแต้มและความยาว จะถือว่า "เสมอ"
+
+            ⌨️ ปุ่มคำสั่งระบบ  |  System Controls:
+            ──────────────────────────────────────────────────────────────────
+              • ESC : หยุดเกมชั่วคราว (Pause) / เล่นเกมต่อ (Resume)
+              • R   : กลับสู่หน้าเมนูหลัก (ใช้ได้ขณะหน้าจอ Pause)
+              • P   : สลับเปิด/ปิดเสียงเพลงและเอฟเฟกต์ (Toggle Mute ในหน้า Menu หรือ Pause)
+
+            ขอให้สนุกกับการประลองฝีมือ! 🐍✨
             """;
 
-        JOptionPane.showMessageDialog(panel, howToPlay, "วิธีเล่น", JOptionPane.INFORMATION_MESSAGE);
+        JOptionPane.showMessageDialog(panel, howToPlay, "วิธีเล่นเกมงู 2 ผู้เล่น (How to Play)", JOptionPane.INFORMATION_MESSAGE);
         panel.requestFocusInWindow();
     }
 
@@ -204,7 +268,7 @@ public class GameController implements ActionListener {
      */
     private void toggleMute() {
         audioManager.toggleMute();
-        panel.updateMuteButton(audioManager.isMuted());
+        panel.showMuteToast(audioManager.isMuted());
 
         if (!audioManager.isMuted()) {
             if (currentState == GameState.MENU) {
@@ -299,15 +363,16 @@ public class GameController implements ActionListener {
                 Direction.LEFT, Constants.SNAKE2_HEAD_COLOR,
                 Constants.SNAKE2_BODY_COLOR, Constants.SNAKE2_BOOST_HEAD_COLOR);
 
-        food = new Food();
-        while (food.isOccupiedBy(snake1, snake2)) {
-            food.generateNewPosition();
-        }
+        generateNewFood();
+
+        tickCount = 0; // รีเซ็ตตัวนับรอบการติ๊ก
+        bullets.clear(); // รีเซ็ตรายการกระสุน
+        remainingTimeMs = Constants.GAME_DURATION_SEC * 1000; // รีเซ็ตตัวจับเวลา
 
         if (timer != null && timer.isRunning()) {
             timer.stop();
         }
-        timer = new Timer(Constants.NORMAL_SPEED_DELAY, this);
+        timer = new Timer(Constants.GAME_TICK_DELAY, this);
         timer.start();
     }
 
@@ -315,7 +380,7 @@ public class GameController implements ActionListener {
      * อัพเดทการแสดงผล
      */
     private void updateView() {
-        panel.updateGameData(snake1, snake2, food, currentState, winnerText);
+        panel.updateGameData(snake1, snake2, food, currentState, winnerText, bullets, remainingTimeMs);
     }
 
     /**
@@ -325,16 +390,34 @@ public class GameController implements ActionListener {
     public void actionPerformed(ActionEvent e) {
         if (currentState != GameState.PLAYING) return;
 
-        // จัดการเสริมพลัง (ใช้ PowerBoostManager)
-        powerBoostManager.handlePowerBoosts(snake1, snake2);
+        tickCount++;
 
-        // เคลื่อนที่
+        // Decrement by the delay actually used for this tick (may differ during fast phase)
+        int prevDelay = timer.getDelay();
+        remainingTimeMs -= prevDelay;
+        if (remainingTimeMs <= 0) {
+            remainingTimeMs = 0;
+            handleTimeOut();
+            return;
+        }
+
+        // Speed phase: halve tick delay in the last FAST_PHASE_THRESHOLD_SEC seconds
+        int targetDelay = remainingTimeMs <= Constants.FAST_PHASE_THRESHOLD_SEC * 1000
+                ? Constants.GAME_TICK_DELAY / 2 : Constants.GAME_TICK_DELAY;
+        if (prevDelay != targetDelay) timer.setDelay(targetDelay);
+
+        powerBoostManager.handlePowerBoosts(snake1, snake2);
         moveSnakes();
 
-        // ตรวจสอบการกินอาหาร
-        checkFoodCollision();
+        for (int step = 0; step < Constants.BULLET_SPEED_MULTIPLIER; step++) {
+            updateAndCheckBullets();
+        }
 
-        // ตรวจสอบการชน
+        // Respawn expired food before collision check so a snake can't eat a ghost item
+        if (food.isExpired()) {
+            generateNewFood();
+        }
+        checkFoodCollision();
         checkCollisions();
 
         if (currentState == GameState.PLAYING) {
@@ -343,37 +426,66 @@ public class GameController implements ActionListener {
     }
 
     /**
-     * เคลื่อนที่งูทั้งสองตัว
+     * Advances both snakes by one step, respecting freeze and speed-boost states.
+     *
+     * Normal speed  = move every 2 ticks (tickCount % 2 == 0).
+     * Speed-boosted = move every tick (double speed).
+     * Frozen        = never move until the freeze timer expires.
      */
     private void moveSnakes() {
-        snake1.move();
-        snake2.move();
+        boolean snake1ShouldMove = !snake1.isFrozen() && (snake1.isPowerBoostActive() || tickCount % 2 == 0);
+        if (snake1ShouldMove) {
+            snake1.move();
+        }
+
+        boolean snake2ShouldMove = !snake2.isFrozen() && (snake2.isPowerBoostActive() || tickCount % 2 == 0);
+        if (snake2ShouldMove) {
+            snake2.move();
+        }
     }
 
     /**
-     * ตรวจสอบการกินอาหาร
+     * Checks whether either snake ate the food this tick.
+     * Awards combo bonus points (+1 per consecutive eat within COMBO_WINDOW_MS).
      */
     private void checkFoodCollision() {
         if (food.isEatenBy(snake1)) {
-            food.onConsumed(snake1); // ใช้ Polymorphism ผ่าน Interface
+            food.onConsumed(snake1, snake2);
+            int bonus = Math.max(0, snake1.getComboCount() - 1);
+            if (bonus > 0) snake1.addBonusScore(bonus);
             audioManager.playSound(Constants.SOUND_EAT);
             generateNewFood();
         }
 
         if (food.isEatenBy(snake2)) {
-            food.onConsumed(snake2);
+            food.onConsumed(snake2, snake1);
+            int bonus = Math.max(0, snake2.getComboCount() - 1);
+            if (bonus > 0) snake2.addBonusScore(bonus);
             audioManager.playSound(Constants.SOUND_EAT);
             generateNewFood();
         }
     }
 
     /**
-     * สร้างอาหารใหม่ในตำแหน่งที่ไม่ซ้อนทับงู
+     * สร้างอาหารใหม่แบบสุ่มประเภทในตำแหน่งที่ไม่ซ้อนทับงู
      */
     private void generateNewFood() {
         do {
-            food.generateNewPosition();
+            food = FoodFactory.createRandomFood();
         } while (food.isOccupiedBy(snake1, snake2));
+    }
+
+    /**
+     * วาปหัวงูไปยังขอบฝั่งตรงข้ามเมื่อชนขอบจอ (ใช้กับเกราะ Shield)
+     */
+    private void warpSnakeToOppositeEdge(Snake snake) {
+        int newX = snake.getHead().x;
+        int newY = snake.getHead().y;
+        if (newX < 0) newX = Constants.BOARD_WIDTH - Constants.UNIT_SIZE;
+        else if (newX >= Constants.BOARD_WIDTH) newX = 0;
+        if (newY < 0) newY = Constants.BOARD_HEIGHT - Constants.UNIT_SIZE;
+        else if (newY >= Constants.BOARD_HEIGHT) newY = 0;
+        snake.teleportHead(newX, newY);
     }
 
     /**
@@ -382,67 +494,196 @@ public class GameController implements ActionListener {
     private void checkCollisions() {
         // 1. ชนขอบจอ
         if (snake1.isOutOfBounds()) {
-            winnerText = "ผู้เล่น 2 ชนะ! (งูเขียวตกขอบ)";
-            gameOver();
-            return;
+            if (snake1.isShieldActive()) {
+                snake1.deactivateShield();
+                warpSnakeToOppositeEdge(snake1);
+                audioManager.playSound(Constants.SOUND_EAT);
+            } else {
+                winnerText = "ผู้เล่น 2 ชนะ! (งูเขียวตกขอบ)";
+                gameOver();
+                return;
+            }
         }
 
         if (snake2.isOutOfBounds()) {
-            winnerText = "ผู้เล่น 1 ชนะ! (งูส้มตกขอบ)";
-            gameOver();
-            return;
+            if (snake2.isShieldActive()) {
+                snake2.deactivateShield();
+                warpSnakeToOppositeEdge(snake2);
+                audioManager.playSound(Constants.SOUND_EAT);
+            } else {
+                winnerText = "ผู้เล่น 1 ชนะ! (งูส้มตกขอบ)";
+                gameOver();
+                return;
+            }
         }
 
         // 2. ชนตัวเอง
         if (snake1.isCollidingWithSelf()) {
-            winnerText = "ผู้เล่น 2 ชนะ! (งูเขียวชนตัวเอง)";
-            gameOver();
-            return;
+            if (snake1.isShieldActive()) {
+                snake1.deactivateShield();
+                snake1.activateGhostMode(1500); // มอบสถานะล่องหน 1.5 วิเพื่อเลื้อยหลบออก
+                audioManager.playSound(Constants.SOUND_EAT);
+            } else {
+                winnerText = "ผู้เล่น 2 ชนะ! (งูเขียวชนตัวเอง)";
+                gameOver();
+                return;
+            }
         }
 
         if (snake2.isCollidingWithSelf()) {
-            winnerText = "ผู้เล่น 1 ชนะ! (งูส้มชนตัวเอง)";
-            gameOver();
-            return;
+            if (snake2.isShieldActive()) {
+                snake2.deactivateShield();
+                snake2.activateGhostMode(1500); // มอบสถานะล่องหน 1.5 วิเพื่อเลื้อยหลบออก
+                audioManager.playSound(Constants.SOUND_EAT);
+            } else {
+                winnerText = "ผู้เล่น 1 ชนะ! (งูส้มชนตัวเอง)";
+                gameOver();
+                return;
+            }
         }
 
-        // 3. หัวชนหัว
-        if (snake1.getHead().equals(snake2.getHead())) {
-            determineHeadOnHeadWinner();
-            gameOver();
-            return;
-        }
+        // ตรวจสอบการชนกับฝ่ายตรงข้าม (เฉพาะเมื่อไม่มีงูตัวใดอยู่ในโหมดล่องหน)
+        if (!snake1.isGhostModeActive() && !snake2.isGhostModeActive()) {
+            // 3. หัวชนหัว
+            if (snake1.getHead().equals(snake2.getHead())) {
+                if (snake1.isShieldActive() && snake2.isShieldActive()) {
+                    // ป้องกันตัวเองทั้งคู่ -> เสียเกราะคู่ และสลับเข้าร่างล่องหนเพื่อความปลอดภัย
+                    snake1.deactivateShield();
+                    snake1.activateGhostMode(1500);
+                    snake2.deactivateShield();
+                    snake2.activateGhostMode(1500);
+                    audioManager.playSound(Constants.SOUND_EAT);
+                } else if (snake1.isShieldActive() && !snake2.isShieldActive()) {
+                    winnerText = "ผู้เล่น 1 ชนะ! (รอดด้วยโล่ป้องกัน)";
+                    gameOver();
+                    return;
+                } else if (!snake1.isShieldActive() && snake2.isShieldActive()) {
+                    winnerText = "ผู้เล่น 2 ชนะ! (รอดด้วยโล่ป้องกัน)";
+                    gameOver();
+                    return;
+                } else {
+                    determineHeadOnHeadWinner();
+                    gameOver();
+                    return;
+                }
+            }
 
-        // 4. หัวชนลำตัว
-        if (snake2.isBodyAt(snake1.getHead())) {
-            winnerText = "ผู้เล่น 2 ชนะ! (งูเขียวชนลำตัวงูส้ม)";
-            gameOver();
-            return;
-        }
+            // 4. หัวชนลำตัว
+            if (snake2.isBodyAt(snake1.getHead())) {
+                if (snake1.isShieldActive()) {
+                    snake1.deactivateShield();
+                    snake1.activateGhostMode(1500); // เสียโล่แต่เดินต่อได้
+                    audioManager.playSound(Constants.SOUND_EAT);
+                } else {
+                    winnerText = "ผู้เล่น 2 ชนะ! (งูเขียวชนลำตัวงูส้ม)";
+                    gameOver();
+                    return;
+                }
+            }
 
-        if (snake1.isBodyAt(snake2.getHead())) {
-            winnerText = "ผู้เล่น 1 ชนะ! (งูส้มชนลำตัวงูเขียว)";
-            gameOver();
-            return;
+            if (snake1.isBodyAt(snake2.getHead())) {
+                if (snake2.isShieldActive()) {
+                    snake2.deactivateShield();
+                    snake2.activateGhostMode(1500);
+                    audioManager.playSound(Constants.SOUND_EAT);
+                } else {
+                    winnerText = "ผู้เล่น 1 ชนะ! (งูส้มชนลำตัวงูเขียว)";
+                    gameOver();
+                    return;
+                }
+            }
         }
+    }
+
+    /**
+     * ทำการยิงกระสุนจากงูที่กำหนด
+     * @param shooter งูที่เป็นผู้ยิง
+     */
+    private void shootBullet(Snake shooter) {
+        Direction dir = shooter.getDirection();
+        Point head = shooter.getHead();
+        Color bulletColor = (shooter == snake1) ? new Color(0, 255, 0) : new Color(255, 140, 0);
+        if (shooter.shoot()) {
+            bullets.add(new Bullet(head.x, head.y, dir, shooter, bulletColor));
+            audioManager.playSound(Constants.SOUND_EAT);
+        }
+    }
+
+    /**
+     * Advances each bullet one step, then checks for three removal conditions:
+     *   1. Out of bounds — remove bullet.
+     *   2. Hit food     — respawn food, remove bullet.
+     *   3. Hit opponent — penalise opponent (score & length), remove bullet.
+     *
+     * Called BULLET_SPEED_MULTIPLIER times per tick to avoid tunnelling through gaps.
+     */
+    private void updateAndCheckBullets() {
+        Iterator<Bullet> iterator = bullets.iterator();
+        while (iterator.hasNext()) {
+            Bullet bullet = iterator.next();
+            bullet.move();
+
+            // 1. ตรวจสอบการตกขอบจอ
+            if (bullet.isOutOfBounds()) {
+                iterator.remove();
+                continue;
+            }
+
+            // 2. ตรวจสอบการชนกับอาหาร (ทำลายอาหารแล้วสร้างอาหารใหม่ตามเงื่อนไขข้อ 5.2)
+            if (bullet.getPosition().equals(food.getPosition())) {
+                generateNewFood();
+                audioManager.playSound(Constants.SOUND_EAT); // เล่นเสียงเพื่อแสดงความเสียหาย
+                iterator.remove();
+                continue;
+            }
+
+            // 3. ตรวจสอบการชนกับงูฝ่ายตรงข้าม (ใช้การชนแบบ Polymorphic ผ่าน interface Collidable)
+            Snake opponent = (bullet.getShooter() == snake1) ? snake2 : snake1;
+            if (bullet.isCollidingWith(opponent)) {
+                opponent.decreaseScore(Constants.BULLET_SCORE_PENALTY);
+                opponent.shrinkSafely(); // ลดความยาวคู่ต่อสู้ลง 1 หน่วย (แต่ไม่ต่ำกว่าความยาวเริ่มต้น 3 หน่วย)
+                audioManager.playSound(Constants.SOUND_EAT); // เล่นเสียงชนงู
+                iterator.remove();
+            }
+        }
+    }
+
+    /**
+     * จัดการเมื่อตัวจับเวลาหมดเวลา
+     */
+    private void handleTimeOut() {
+        int score1 = snake1.getFoodEaten();
+        int score2 = snake2.getFoodEaten();
+
+        if (score1 > score2) {
+            winnerText = "หมดเวลา! ผู้เล่น 1 ชนะด้วยคะแนน (" + score1 + " VS " + score2 + ")";
+        } else if (score2 > score1) {
+            winnerText = "หมดเวลา! ผู้เล่น 2 ชนะด้วยคะแนน (" + score2 + " VS " + score1 + ")";
+        } else {
+            // กรณีแต้มเท่ากัน ให้เปรียบเทียบขนาดความยาว
+            int len1 = snake1.getLength();
+            int len2 = snake2.getLength();
+            if (len1 > len2) {
+                winnerText = "หมดเวลา! เสมอคะแนน แต่งูเขียวตัวยาวกว่าชนะ (" + len1 + " VS " + len2 + ")";
+            } else if (len2 > len1) {
+                winnerText = "หมดเวลา! เสมอคะแนน แต่งูส้มตัวยาวกว่าชนะ (" + len2 + " VS " + len1 + ")";
+            } else {
+                winnerText = "หมดเวลา! เสมอกันทั้งคะแนนและความยาว (" + score1 + " แต้ม, ยาว " + len1 + ")";
+            }
+        }
+        gameOver();
     }
 
     /**
      * ตัดสินผู้ชนะเมื่อหัวชนหัว
      */
     private void determineHeadOnHeadWinner() {
-        if (snake1.isPowerBoostActive() && !snake2.isPowerBoostActive()) {
-            winnerText = "ผู้เล่น 1 ชนะ! (เสริมพลังชนะ)";
-        } else if (!snake1.isPowerBoostActive() && snake2.isPowerBoostActive()) {
-            winnerText = "ผู้เล่น 2 ชนะ! (เสริมพลังชนะ)";
+        if (snake1.getLength() > snake2.getLength()) {
+            winnerText = "ผู้เล่น 1 ชนะ! (ตัวใหญ่กว่า)";
+        } else if (snake2.getLength() > snake1.getLength()) {
+            winnerText = "ผู้เล่น 2 ชนะ! (ตัวใหญ่กว่า)";
         } else {
-            if (snake1.getLength() > snake2.getLength()) {
-                winnerText = "ผู้เล่น 1 ชนะ! (ตัวใหญ่กว่า)";
-            } else if (snake2.getLength() > snake1.getLength()) {
-                winnerText = "ผู้เล่น 2 ชนะ! (ตัวใหญ่กว่า)";
-            } else {
-                winnerText = "เสมอ! (ตัวเท่ากัน)";
-            }
+            winnerText = "เสมอ! (ตัวเท่ากัน)";
         }
     }
 

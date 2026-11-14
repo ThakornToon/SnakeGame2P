@@ -9,12 +9,14 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Test class สำหรับ Snake
- * ทดสอบการทำงานทั้งหมดของงู รวมถึงการเคลื่อนที่ การเจริญเติบโต การเสริมพลัง
+ * ทดสอบการทำงานทั้งหมดของงู รวมถึงการเคลื่อนที่ การเจริญเติบโต การเสริมพลัง และสถานะพิเศษต่างๆ
  *
  * เหตุผลที่ต้องทดสอบ:
  * 1. ต้องมั่นใจว่าการเคลื่อนที่ถูกต้อง
  * 2. ตรวจสอบการจัดการสถานะต่างๆ (เสริมพลัง, การชน)
  * 3. ป้องกัน bug จากการเลี้ยวกลับทาง
+ * 4. ตรวจสอบระบบคอมโบและคะแนนโบนัส
+ * 5. ตรวจสอบสถานะพิเศษ (Shield, Ghost Mode, Freeze) และการวาร์ปหัวงู
  */
 public class SnakeTest {
 
@@ -244,5 +246,178 @@ public class SnakeTest {
 
         assertNotEquals(999, snake.getYPositions().get(0),
                 "Original snake positions should not be affected by external changes");
+    }
+
+    @Test
+    void testDecreaseScore() {
+        // ทดสอบการลดคะแนน: คะแนนต้องลดลงตามจำนวนและสามารถติดลบได้ตามกติกาข้อ 4
+        snake.decreaseScore(2);
+        assertEquals(-2, snake.getFoodEaten(), "Score should decrease to -2");
+
+        snake.decreaseScore(3);
+        assertEquals(-5, snake.getFoodEaten(), "Score should decrease to -5");
+    }
+
+    @Test
+    void testShrinkSafely() {
+        // ทดสอบการลดความยาวเมื่อโดนยิง:
+        // 1. เริ่มต้นความยาว 3: ไม่สามารถหดได้อีกเพื่อรักษาระดับขนาดต่ำสุด
+        assertFalse(snake.shrinkSafely(), "Should not shrink below starting length 3");
+        assertEquals(3, snake.getLength(), "Length should remain 3");
+
+        // 2. ขยายขนาดให้ยาวเป็น 5: ต้องหดได้สำเร็จทีละ 1 หน่วยจนกระทั่งเหลือ 3
+        snake.grow(); // 4
+        snake.grow(); // 5
+        assertEquals(5, snake.getLength());
+
+        assertTrue(snake.shrinkSafely(), "First shrink should succeed");
+        assertEquals(4, snake.getLength(), "Length should decrease to 4");
+
+        assertTrue(snake.shrinkSafely(), "Second shrink should succeed");
+        assertEquals(3, snake.getLength(), "Length should decrease to 3");
+
+        assertFalse(snake.shrinkSafely(), "Third shrink should fail because it reached minimum size");
+        assertEquals(3, snake.getLength(), "Length should remain 3");
+    }
+
+    @Test
+    void testCanShootConstraints() {
+        // ทดสอบเงื่อนไขการยิงกระสุน:
+        // 1. เริ่มต้นความยาว 3: ไม่ควรยิงได้ (เพราะถ้ายิงจะสั้นลงเหลือ 0 ซึ่งต่ำกว่าความยาวเริ่มต้น)
+        assertFalse(snake.canShoot(), "Should not be able to shoot with length 3");
+        assertFalse(snake.shoot(), "Shoot action should fail with length 3");
+
+        // 2. ขยายขนาดให้ยาวเป็น 5: ก็ยังยิงไม่ได้ (เพราะถ้ายาว 5 ลด 3 จะเหลือ 2 ซึ่งต่ำกว่าความยาวเริ่มต้น 3)
+        snake.grow(); // 4
+        snake.grow(); // 5
+        assertFalse(snake.canShoot(), "Should not be able to shoot with length 5");
+        assertFalse(snake.shoot(), "Shoot action should fail with length 5");
+
+        // 3. ขยายขนาดให้ยาวเป็น 6: ต้องยิงได้สำเร็จ (ยาว 6 ลด 3 เหลือ 3 ซึ่งเท่ากับความยาวเริ่มต้นพอดี)
+        snake.grow(); // 6
+        assertTrue(snake.canShoot(), "Should be able to shoot with length 6");
+        assertTrue(snake.shoot(), "Shoot action should succeed with length 6");
+        assertEquals(3, snake.getLength(), "Length should reduce by 3 after shoot");
+    }
+
+    @Test
+    void testShootCooldown() throws InterruptedException {
+        // ทดสอบระบบคูลดาวน์กระสุน:
+        // ขยายขนาดให้ยาว 9 เพื่อให้ยิงได้ 2 นัด
+        snake.grow(); // 4
+        snake.grow(); // 5
+        snake.grow(); // 6
+        snake.grow(); // 7
+        snake.grow(); // 8
+        snake.grow(); // 9
+
+        // ยิงนัดที่ 1: ต้องสำเร็จ
+        assertTrue(snake.shoot(), "First shot should succeed");
+
+        // ยิงทันทีนัดที่ 2: ต้องล้มเหลวเนื่องจากติดคูลดาวน์
+        assertFalse(snake.canShoot(), "Second shot should be blocked by cooldown");
+        assertFalse(snake.shoot(), "Second shoot action should fail due to cooldown");
+
+        // รอ 500 ms (คูลดาวน์สิ้นสุด)
+        Thread.sleep(Constants.BULLET_COOLDOWN_MS + 10);
+
+        // ยิงนัดที่ 2 หลังผ่านพ้นคูลดาวน์: ต้องสำเร็จ
+        assertTrue(snake.canShoot(), "Second shot should be available after cooldown");
+        assertTrue(snake.shoot(), "Second shot should succeed after cooldown");
+        assertEquals(3, snake.getLength(), "Length should be 3 after two shots");
+    }
+
+    @Test
+    void testComboSystem() {
+        // ทดสอบ: ระบบคอมโบเมื่อกินอาหารต่อเนื่องภายในเวลาที่กำหนด
+        // เหตุผล: ตรวจสอบการสะสมตัวคูณคอมโบ และต้องไม่เกินเพดานสูงสุดที่ 5x
+        assertEquals(0, snake.getComboCount(), "Initial combo should be 0");
+
+        snake.grow();
+        assertEquals(1, snake.getComboCount(), "First eat sets combo to 1");
+
+        snake.grow();
+        assertEquals(2, snake.getComboCount(), "Second eat within window increases combo to 2");
+
+        snake.grow();
+        assertEquals(3, snake.getComboCount(), "Third eat within window increases combo to 3");
+
+        snake.grow();
+        snake.grow();
+        assertEquals(5, snake.getComboCount(), "Fifth eat within window reaches max combo of 5");
+
+        snake.grow();
+        assertEquals(5, snake.getComboCount(), "Combo should cap at 5");
+    }
+
+    @Test
+    void testAddBonusScore() {
+        // ทดสอบ: การเพิ่มคะแนนโบนัสพิเศษ
+        // เหตุผล: ตรวจสอบว่า addBonusScore เพิ่มคะแนน foodEaten ได้ถูกต้อง
+        int initialScore = snake.getFoodEaten();
+        snake.addBonusScore(3);
+        assertEquals(initialScore + 3, snake.getFoodEaten(), "Score should increase by bonus amount");
+    }
+
+    @Test
+    void testShieldActivationAndDeactivation() {
+        // ทดสอบ: การเปิดและปิดใช้งานเกราะป้องกัน (Shield)
+        // เหตุผล: ตรวจสอบการจัดการสถานะ shieldActive สำหรับป้องกันการชน
+        assertFalse(snake.isShieldActive(), "Shield should be inactive initially");
+
+        snake.activateShield();
+        assertTrue(snake.isShieldActive(), "Shield should be active after activation");
+
+        snake.deactivateShield();
+        assertFalse(snake.isShieldActive(), "Shield should be inactive after deactivation");
+    }
+
+    @Test
+    void testGhostModeActivationAndDeactivation() {
+        // ทดสอบ: การเปิดและปิดใช้งานโหมดล่องหน (Ghost Mode)
+        // เหตุผล: ตรวจสอบการจัดการสถานะ ghostModeActive และเวลาที่เหลืออยู่
+        assertFalse(snake.isGhostModeActive(), "Ghost mode should be inactive initially");
+
+        snake.activateGhostMode(3000);
+        assertTrue(snake.isGhostModeActive(), "Ghost mode should be active after activation");
+        assertTrue(snake.getGhostModeRemainingTime() > 0, "Remaining time should be positive");
+
+        snake.deactivateGhostMode();
+        assertFalse(snake.isGhostModeActive(), "Ghost mode should be inactive after deactivation");
+        assertEquals(0, snake.getGhostModeRemainingTime(), "Remaining time should be 0");
+    }
+
+    @Test
+    void testFreezeActivationAndDeactivation() {
+        // ทดสอบ: การแช่แข็งและยกเลิกการแช่แข็ง (Freeze)
+        // เหตุผล: ตรวจสอบการจัดการสถานะ frozen และการนับเวลาแช่แข็ง
+        assertFalse(snake.isFrozen(), "Snake should not be frozen initially");
+
+        snake.freeze(3000);
+        assertTrue(snake.isFrozen(), "Snake should be frozen after freeze()");
+        assertTrue(snake.getFreezeRemainingTime() > 0, "Freeze remaining time should be positive");
+
+        snake.unfreeze();
+        assertFalse(snake.isFrozen(), "Snake should not be frozen after unfreeze()");
+        assertEquals(0, snake.getFreezeRemainingTime(), "Freeze remaining time should be 0");
+    }
+
+    @Test
+    void testTeleportHead() {
+        // ทดสอบ: การย้ายตำแหน่งหัวงูทันที (teleportHead)
+        // เหตุผล: ใช้สำหรับระบบวาร์ปเมื่อเกราะแตกกรณีชนขอบจอ โดยลำตัวส่วนอื่นต้องไม่ขยับตาม
+        int oldBody1X = snake.getXPositions().get(1);
+        int oldBody1Y = snake.getYPositions().get(1);
+
+        snake.teleportHead(950, 650);
+
+        assertEquals(950, snake.getHead().x, "Head X should be teleported to 950");
+        assertEquals(650, snake.getHead().y, "Head Y should be teleported to 650");
+        assertEquals(950, snake.getX(), "GameObject X should match teleported head X");
+        assertEquals(650, snake.getY(), "GameObject Y should match teleported head Y");
+
+        // ลำตัวตำแหน่งอื่นต้องไม่ขยับ
+        assertEquals(oldBody1X, snake.getXPositions().get(1), "Body segment 1 X should not change");
+        assertEquals(oldBody1Y, snake.getYPositions().get(1), "Body segment 1 Y should not change");
     }
 }

@@ -6,35 +6,60 @@ import java.awt.*;
 import java.util.Random;
 
 /**
- * คลาสแทนอาหาร สืบทอดจาก GameObject และ implement Consumable
- * สามารถถูกกินได้
+ * Abstract base for all food items in the game.
+ * Follows OCP: new food types are added by subclassing, not by modifying this class.
+ * Each subclass defines its own visual (draw) and effect (onConsumed).
+ *
+ * คลาสแม่แบบสำหรับอาหารทุกประเภทในเกม ใช้หลักการ Polymorphism และ OCP
  */
-public class Food extends GameObject implements Consumable {
-    /** ตัวสร้างเลขสุ่ม */
-    private final Random random = new Random();
+public abstract class Food extends GameObject implements Consumable {
+
+    /** Shared RNG — one instance per class, not per method call. */
+    private static final Random RANDOM = new Random();
+
+    /** Wall-clock time when this food object was created (ms). Used for expiry and visuals. */
+    private final long spawnTime = System.currentTimeMillis();
 
     /**
-     * สร้างอาหารใหม่
+     * สร้างอาหารใหม่และสุ่มตำแหน่งเริ่มต้น
      */
     public Food() {
         super(0, 0);
         generateNewPosition();
     }
 
+    /** Returns true when this food has been on the board longer than FOOD_EXPIRE_MS. */
+    public boolean isExpired() {
+        return System.currentTimeMillis() - spawnTime >= Constants.FOOD_EXPIRE_MS;
+    }
+
     /**
-     * สุ่มตำแหน่งใหม่
+     * Fraction of lifetime remaining: 1.0 = just spawned, 0.0 = expired.
+     * Subclasses use this to drive expiry-warning visuals.
+     */
+    public double getLifeRatio() {
+        return Math.max(0.0, 1.0 - (double)(System.currentTimeMillis() - spawnTime) / Constants.FOOD_EXPIRE_MS);
+    }
+
+    /**
+     * Smooth 0→1 sinusoidal pulse oscillating at the given period (ms).
+     * Use shorter periods to pulse faster (e.g. when food is about to expire).
+     */
+    protected double getPulse(double periodMs) {
+        return (Math.sin(System.currentTimeMillis() / periodMs) + 1.0) / 2.0;
+    }
+
+    /**
+     * สุ่มตำแหน่งใหม่บนบอร์ดเกมตามขนาดช่อง UNIT_SIZE
      */
     public void generateNewPosition() {
-        int x = random.nextInt(Constants.BOARD_WIDTH / Constants.UNIT_SIZE) * Constants.UNIT_SIZE;
-        int y = random.nextInt(Constants.BOARD_HEIGHT / Constants.UNIT_SIZE) * Constants.UNIT_SIZE;
+        int x = RANDOM.nextInt(Constants.BOARD_WIDTH / Constants.UNIT_SIZE) * Constants.UNIT_SIZE;
+        int y = RANDOM.nextInt(Constants.BOARD_HEIGHT / Constants.UNIT_SIZE) * Constants.UNIT_SIZE;
         setPosition(x, y);
     }
 
     /**
-     * ตรวจสอบว่าถูกงูกินหรือไม่
-     * implements from Consumable interface
-     * snake งูที่ต้องการตรวจสอบ
-     * return true ถ้าถูกกิน
+     * ตรวจสอบว่าหัวงูชนกับอาหาร (ถูกกิน) หรือไม่
      */
     @Override
     public boolean isEatenBy(Snake snake) {
@@ -42,29 +67,21 @@ public class Food extends GameObject implements Consumable {
     }
 
     /**
-     * เอฟเฟกต์เมื่อถูกกิน (งูยาวขึ้น)
-     * implements from Consumable interface
-     * snake งูที่กิน
+     * เมธอดเชิงนามธรรมที่จะทำงานเมื่ออาหารถูกกิน
+     * บังคับให้ subclass ต้องกำหนดพฤติกรรมเอง (Polymorphic Behavior)
      */
     @Override
-    public void onConsumed(Snake snake) {
-        snake.grow();
-    }
+    public abstract void onConsumed(Snake eater, Snake opponent);
 
     /**
-     * ตรวจสอบว่าอาหารซ้อนทับกับงูหรือไม่
-     * snake1 งูผู้เล่น 1
-     * snake2 งูผู้เล่น 2
-     * return true ถ้าซ้อนทับ
+     * ตรวจสอบว่าอาหารซ้อนทับกับงูผู้เล่น 1 หรือผู้เล่น 2 หรือไม่
      */
     public boolean isOccupiedBy(Snake snake1, Snake snake2) {
         return isOccupiedBySnake(snake1) || isOccupiedBySnake(snake2);
     }
 
     /**
-     * ตรวจสอบว่าอาหารซ้อนทับกับงูตัวใดตัวหนึ่งหรือไม่
-     * snake งูที่ต้องการตรวจสอบ
-     * return true ถ้าซ้อนทับ
+     * ตรวจสอบว่าอาหารซ้อนทับกับตัวงูที่กำหนดหรือไม่
      */
     private boolean isOccupiedBySnake(Snake snake) {
         for (int i = 0; i < snake.getLength(); i++) {
@@ -74,16 +91,5 @@ public class Food extends GameObject implements Consumable {
             }
         }
         return false;
-    }
-
-    /**
-     * วาดอาหาร
-     * implements from GameObject abstract method
-     * g Graphics object
-     */
-    @Override
-    public void draw(Graphics g) {
-        g.setColor(Constants.FOOD_COLOR);
-        g.fillOval(getX(), getY(), Constants.UNIT_SIZE, Constants.UNIT_SIZE);
     }
 }
