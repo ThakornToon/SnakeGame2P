@@ -3,13 +3,18 @@ package SnakeGame2P.view.renderer;
 import SnakeGame2P.model.entity.Snake;
 import SnakeGame2P.model.entity.Food;
 import SnakeGame2P.utils.Constants;
+import SnakeGame2P.view.GamePanel;
 import java.awt.*;
 
 /**
  * Renderer สำหรับหน้า Pause
  */
 public class PausedRenderer implements GameRendererStrategy {
-    private final PlayingRenderer playingRenderer = new PlayingRenderer();
+    private final PlayingRenderer playingRenderer;
+
+    public PausedRenderer(GamePanel panel) {
+        this.playingRenderer = new PlayingRenderer(panel);
+    }
 
     @Override
     public void render(Graphics g, Snake snake1, Snake snake2, Food food, String additionalData) {

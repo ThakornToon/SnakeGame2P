@@ -147,21 +147,17 @@ public class PowerBoostManagerTest {
         assertFalse(snake.isPowerBoostActive(),
                 "Power boost should auto-deactivate at length 3");
 
-        // บันทึกค่า lastShrinkTime ก่อนเรียก handle อีกรอบ
+        // จำลองเวลาผ่านไปอีกครั้ง แล้วบันทึกค่าก่อนเรียก handle
+        snake.setLastShrinkTime(System.currentTimeMillis() - Constants.SPEED_BOOST_SHRINK_INTERVAL - 1000);
         long lastShrinkTime = snake.getLastShrinkTime();
 
-        // จำลองเวลาผ่านไปอีกครั้ง
-        snake.setLastShrinkTime(System.currentTimeMillis() - Constants.SPEED_BOOST_SHRINK_INTERVAL - 1000);
-
-        // เรียก handle อีกครั้ง (power boost ไม่ทำงานแล้ว)
+        // เรียก handle อีกครั้ง (power boost ไม่ทำงานแล้ว ไม่ควรมีอะไรเปลี่ยนแปลง)
         manager.handlePowerBoosts(snake, snake2);
 
         // ตรวจสอบว่าความยาวไม่เปลี่ยนแปลง
         assertEquals(3, snake.getLength(), "Length should not go below 3");
 
         // ตรวจสอบว่า lastShrinkTime ไม่เปลี่ยนแปลง (เพราะ power boost ไม่ทำงานแล้ว)
-        // เนื่องจาก power boost ไม่ทำงาน method applyPowerBoostEffect จะไม่ถูกเรียก
-        // ดังนั้น lastShrinkTime ควรเท่าเดิม
         assertEquals(lastShrinkTime, snake.getLastShrinkTime(),
                 "Last shrink time should not change when power boost is inactive");
     }

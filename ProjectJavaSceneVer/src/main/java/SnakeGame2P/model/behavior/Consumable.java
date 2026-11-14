@@ -15,7 +15,8 @@ public interface Consumable {
 
     /**
      * เอฟเฟกต์เมื่อถูกกิน
-     * snake งูที่กิน
+     * eater งูที่กิน
+     * opponent งูฝ่ายตรงข้าม
      */
-    void onConsumed(Snake snake);
+    void onConsumed(Snake eater, Snake opponent);
 }

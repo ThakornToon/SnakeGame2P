@@ -3,13 +3,18 @@ package SnakeGame2P.view.renderer;
 import SnakeGame2P.model.entity.Snake;
 import SnakeGame2P.model.entity.Food;
 import SnakeGame2P.utils.Constants;
+import SnakeGame2P.view.GamePanel;
 import java.awt.*;
 
 /**
  * Renderer สำหรับหน้า Game Over
  */
 public class GameOverRenderer implements GameRendererStrategy {
-    private final PlayingRenderer playingRenderer = new PlayingRenderer();
+    private final PlayingRenderer playingRenderer;
+
+    public GameOverRenderer(GamePanel panel) {
+        this.playingRenderer = new PlayingRenderer(panel);
+    }
 
     @Override
     public void render(Graphics g, Snake snake1, Snake snake2, Food food, String additionalData) {
@@ -22,9 +27,15 @@ public class GameOverRenderer implements GameRendererStrategy {
         g.setColor(Constants.OVERLAY_COLOR);
         g.fillRect(0, 0, Constants.BOARD_WIDTH, Constants.BOARD_HEIGHT);
 
-        // แสดงผลผู้ชนะ
-        g.setColor(Color.RED);
-        g.setFont(new Font("Arial", Font.BOLD, 40));
+        // แสดงผลผู้ชนะ ด้วยสีเฉพาะของแต่ละฝ่าย
+        if (additionalData.contains("ผู้เล่น 1") || additionalData.contains("งูเขียว")) {
+            g.setColor(new Color(50, 255, 50)); // สีเขียวสว่างสำหรับผู้เล่น 1
+        } else if (additionalData.contains("ผู้เล่น 2") || additionalData.contains("งูส้ม")) {
+            g.setColor(new Color(255, 165, 0)); // สีส้มสำหรับผู้เล่น 2
+        } else {
+            g.setColor(Color.YELLOW); // สีเหลืองเมื่อหมดเวลาแล้วเสมอ
+        }
+        g.setFont(new Font("Arial", Font.BOLD, 32));
         // วางตรงกลาง
         FontMetrics metrics = g.getFontMetrics();
         int textX = (Constants.BOARD_WIDTH - metrics.stringWidth(additionalData)) / 2;
